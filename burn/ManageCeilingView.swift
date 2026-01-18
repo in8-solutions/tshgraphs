@@ -165,7 +165,7 @@ struct ManageCeilingView: View {
                     HStack {
                         Text("Total")
                             .frame(width: 140, alignment: .leading)
-                        Text(hoursString(totalReleaseHours))
+                        Text(totalReleaseHours.hoursFormatted)
                             .frame(width: 120, alignment: .leading)
                             .bold()
                         Spacer(minLength: 0)
@@ -234,15 +234,6 @@ struct ManageCeilingView: View {
         vm.ceilingReleases.reduce(0) { $0 + $1.hours }
     }
 
-    private func hoursString(_ v: Double) -> String {
-        let rounded = (v * 100).rounded() / 100
-        if rounded == floor(rounded) {
-            return String(Int(rounded))
-        } else {
-            return String(format: "%.2f", rounded)
-        }
-    }
-
     // MARK: - PoP Bindings & Validation
     private var popStartBinding: Binding<Date> {
         Binding<Date>(
@@ -257,8 +248,7 @@ struct ManageCeilingView: View {
         )
     }
     private var hasValidPoP: Bool {
-        if let s = vm.popStartDate, let e = vm.popEndDate { return s <= e }
-        return false
+        CeilingStore.isValidPoP(vm.popStartDate, vm.popEndDate)
     }
     private var popValidationMessage: String {
         if vm.popStartDate == nil || vm.popEndDate == nil { return "Set both PoP Start and PoP End." }

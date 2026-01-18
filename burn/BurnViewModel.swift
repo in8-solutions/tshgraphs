@@ -73,7 +73,7 @@ final class BurnViewModel: ObservableObject {
     func loadConfigAndJobs() async {
         do {
             let config = try await Self.loadConfig()
-            self.api = APIClient(config: config)
+            self.api = try APIClient(config: config)
             async let codesTask = api!.fetchJobCodes()
             async let usersTask = api!.fetchUsers()
             let (codes, users) = try await (codesTask, usersTask)
@@ -375,9 +375,7 @@ final class BurnViewModel: ObservableObject {
     }
 
     private static func keyFor(date: Date) -> String {
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM"
-        return df.string(from: date)
+        DateFormatters.yearMonth.string(from: date)
     }
 
     private static func monthKeys(from start: Date, to end: Date) -> [String] {
@@ -431,18 +429,6 @@ final class BurnViewModel: ObservableObject {
             ceilingSeries = result
             ceiling75Series = result.map { $0 * 0.75 }
         }
-    }
-
-    private static func endDateForMonthKey(_ key: String) -> Date? {
-        // key format: "yyyy-MM"
-        let parts = key.split(separator: "-")
-        guard parts.count == 2, let y = Int(parts[0]), let m = Int(parts[1]) else { return nil }
-        let cal = Calendar.current
-        let comps = DateComponents(year: y, month: m, day: 1)
-        guard let first = cal.date(from: comps) else { return nil }
-        guard let nextMonth = cal.date(byAdding: .month, value: 1, to: first) else { return nil }
-        // End of this month = one second before the first instant of next month
-        return cal.date(byAdding: .second, value: -1, to: nextMonth)
     }
 
     private static func startOfNextMonthForMonthKey(_ key: String) -> Date? {

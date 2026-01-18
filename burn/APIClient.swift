@@ -1,13 +1,24 @@
 import Foundation
 
+enum APIClientError: LocalizedError {
+    case invalidURL(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL(let url):
+            return "Invalid API_URL in config.json: \(url)"
+        }
+    }
+}
+
 final class APIClient {
     private let baseURL: URL
     private let token: String
 
-    init(config: Config) {
+    init(config: Config) throws {
         let trimmed = config.API_URL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let base = URL(string: trimmed) else {
-            fatalError("Invalid API_URL in config.json: \(config.API_URL)")
+            throw APIClientError.invalidURL(config.API_URL)
         }
         self.baseURL = base
         self.token = config.API_TOKEN
@@ -48,11 +59,9 @@ final class APIClient {
     }
 
     func fetchTimesheets(start: Date, end: Date, jobcodeIDs: [Int]? = nil) async throws -> [TimesheetEntry] {
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM-dd"
         var items = [
-            URLQueryItem(name: "start_date", value: df.string(from: start)),
-            URLQueryItem(name: "end_date", value: df.string(from: end))
+            URLQueryItem(name: "start_date", value: DateFormatters.yearMonthDay.string(from: start)),
+            URLQueryItem(name: "end_date", value: DateFormatters.yearMonthDay.string(from: end))
         ]
         if let ids = jobcodeIDs, !ids.isEmpty {
             let csv = ids.map(String.init).joined(separator: ",")

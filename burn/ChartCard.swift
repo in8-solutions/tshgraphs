@@ -2,6 +2,10 @@ import SwiftUI
 import Charts
 
 struct ChartCard: View {
+    // Line styles
+    private static let solidLine = StrokeStyle(lineWidth: 2)
+    private static let dashedLine = StrokeStyle(lineWidth: 2, dash: [6, 4])
+
     // Inputs
     let title: String
     let employees: [String]
@@ -43,13 +47,8 @@ struct ChartCard: View {
 
     // MARK: Helpers
     private func monthYearShort(for monthString: String) -> String {
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM"
-        guard let date = df.date(from: monthString) else { return monthString }
-        let out = DateFormatter()
-        out.locale = .current
-        out.dateFormat = "LLL ''yy"
-        return out.string(from: date)
+        guard let date = DateFormatters.yearMonth.date(from: monthString) else { return monthString }
+        return DateFormatters.monthYearShort.string(from: date)
     }
 
     private var monthLabels: [String] {
@@ -90,14 +89,14 @@ struct ChartCard: View {
                     series: .value("seg", seg.id)
                 )
                 .foregroundStyle(.blue)
-                .lineStyle(isProjected ? StrokeStyle(lineWidth: 2, dash: [6,4]) : StrokeStyle(lineWidth: 2))
+                .lineStyle(isProjected ? ChartCard.dashedLine : ChartCard.solidLine)
                 LineMark(
                     x: .value("Month", seg.x2),
                     y: .value("Hours", seg.y2),
                     series: .value("seg", seg.id)
                 )
                 .foregroundStyle(.blue)
-                .lineStyle(isProjected ? StrokeStyle(lineWidth: 2, dash: [6,4]) : StrokeStyle(lineWidth: 2))
+                .lineStyle(isProjected ? ChartCard.dashedLine : ChartCard.solidLine)
             }
 
             // Points
@@ -279,7 +278,7 @@ struct ChartCard: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     if let p = projectedTotal {
-                        Text(hoursString(p))
+                        Text(p.hoursFormatted)
                             .font(.footnote.weight(.semibold))
                             .foregroundStyle(projectionColor)
                     } else {
@@ -290,7 +289,7 @@ struct ChartCard: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     if let c = ceilingTotal {
-                        Text(hoursString(c))
+                        Text(c.hoursFormatted)
                             .font(.footnote.weight(.semibold))
                     } else {
                         Text("—").font(.footnote)
@@ -313,14 +312,6 @@ struct ChartCard: View {
         guard idx >= 0 else { return caps.last }
         return caps[idx]
     }
-    private func hoursString(_ v: Double) -> String {
-        let rounded = (v * 100).rounded() / 100
-        if rounded == floor(rounded) {
-            return String(Int(rounded))
-        } else {
-            return String(format: "%.2f", rounded)
-        }
-    }
     private var projectionColor: Color {
         guard let p = projectedTotal, let c = ceilingTotal else { return .primary }
         if p > c * 1.10 { return .red }        // > 10% over
@@ -339,9 +330,7 @@ struct ChartCard: View {
     }
 
     private func endOfMonth(forMonthKey key: String) -> Date? {
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM"
-        guard let monthDate = df.date(from: key) else { return nil }
+        guard let monthDate = DateFormatters.yearMonth.date(from: key) else { return nil }
         let cal = Calendar.current
         let comps = cal.dateComponents([.year, .month], from: monthDate)
         guard let startOfMonth = cal.date(from: comps),
@@ -350,8 +339,6 @@ struct ChartCard: View {
     }
 
     private func shortDate(_ d: Date) -> String {
-        let df = DateFormatter()
-        df.dateFormat = "MM-dd-yy"
-        return df.string(from: d)
+        DateFormatters.shortDate.string(from: d)
     }
 }

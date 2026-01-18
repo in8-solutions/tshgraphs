@@ -1,11 +1,4 @@
 //
-//  MaxHoursStore.swift
-//  burn
-//
-//
-
-
-//
 //  CeilingStore.swift
 //  burn
 //
@@ -26,17 +19,6 @@ struct CeilingStore {
     private static let subdirectory = "ceiling"
 
     // MARK: - Public API
-
-    /// Load ceiling releases for a given job id. Returns an empty array if none exist.
-    static func load(jobId: Int) -> [CeilingRelease] {
-        do {
-            var record = try loadRecord(jobId: jobId)
-            record.releases.sort { $0.date < $1.date }
-            return record.releases
-        } catch {
-            return []
-        }
-    }
 
     /// Load full ceiling record (PoP + releases) with migration support.
     static func loadRecord(jobId: Int) throws -> CeilingRecord {
@@ -82,10 +64,6 @@ struct CeilingStore {
     }
 
     // MARK: - Validation
-    static func hasValidPoP(jobId: Int) -> Bool {
-        guard let rec = try? loadRecord(jobId: jobId) else { return false }
-        return isValidPoP(rec.popStart, rec.popEnd)
-    }
     static func isValidPoP(_ start: Date?, _ end: Date?) -> Bool {
         guard let s = start, let e = end else { return false }
         return s <= e

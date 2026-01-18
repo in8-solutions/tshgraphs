@@ -66,3 +66,46 @@ struct CeilingRelease: Identifiable, Codable, Hashable {
     var hours: Double      // additive; can be negative; fractional allowed
     var note: String? = nil
 }
+
+// MARK: - Formatting Extensions
+
+extension Double {
+    /// Formats hours with up to 2 decimal places, omitting decimals for whole numbers.
+    var hoursFormatted: String {
+        let rounded = (self * 100).rounded() / 100
+        if rounded == floor(rounded) {
+            return String(Int(rounded))
+        } else {
+            return String(format: "%.2f", rounded)
+        }
+    }
+}
+
+// MARK: - Cached DateFormatters
+
+enum DateFormatters {
+    static let yearMonth: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM"
+        return df
+    }()
+
+    static let yearMonthDay: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd"
+        return df
+    }()
+
+    static let shortDate: DateFormatter = {
+        let df = DateFormatter()
+        df.dateFormat = "MM-dd-yy"
+        return df
+    }()
+
+    static let monthYearShort: DateFormatter = {
+        let df = DateFormatter()
+        df.locale = .current
+        df.dateFormat = "LLL ''yy"
+        return df
+    }()
+}
