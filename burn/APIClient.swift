@@ -13,24 +13,29 @@ final class APIClient {
         self.token = config.API_TOKEN
     }
 
-    private func request(_ path: String, query: [URLQueryItem]? = nil) -> URLRequest {
+    private func request(_ path: String, query: [URLQueryItem]? = nil) throws -> URLRequest {
         let cleanPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        var comps = URLComponents(
+        guard var comps = URLComponents(
             url: baseURL.appendingPathComponent(cleanPath, isDirectory: false),
             resolvingAgainstBaseURL: false
-        )!
+        ) else {
+            throw URLError(.badURL)
+        }
         if let query = query { comps.queryItems = query }
-        var req = URLRequest(url: comps.url!)
+        guard let url = comps.url else {
+            throw URLError(.badURL)
+        }
+        var req = URLRequest(url: url)
         req.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.addValue("application/json", forHTTPHeaderField: "Accept")
         #if DEBUG
-        print("🔗 Request URL:", comps.url?.absoluteString ?? "nil")
+        print("Request URL:", url.absoluteString)
         #endif
         return req
     }
 
     func fetchJobCodes() async throws -> [Int: JobCode] {
-        let req = request("jobcodes")   
+        let req = try request("jobcodes")
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
@@ -53,7 +58,7 @@ final class APIClient {
             let csv = ids.map(String.init).joined(separator: ",")
             items.append(URLQueryItem(name: "jobcode_ids", value: csv))
         }
-        let req = request("timesheets", query: items)
+        let req = try request("timesheets", query: items)
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
@@ -63,7 +68,7 @@ final class APIClient {
     }
     
     func fetchUsers() async throws -> [Int: User] {
-        let req = request("users")
+        let req = try request("users")
         let (data, resp) = try await URLSession.shared.data(for: req)
         guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
             throw URLError(.badServerResponse)
