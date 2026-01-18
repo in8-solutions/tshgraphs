@@ -90,16 +90,7 @@ final class BurnViewModel: ObservableObject {
     // MARK: - Ceiling navigation & persistence
     func goToManageCeiling() {
         route = .manageCeiling
-        if let id = selectedJobId {
-            let rec = try? CeilingStore.loadRecord(jobId: id)
-            self.ceilingReleases = rec?.releases ?? []
-            self.popStartDate = rec?.popStart
-            self.popEndDate = rec?.popEnd
-        } else {
-            self.ceilingReleases = []
-            self.popStartDate = nil
-            self.popEndDate = nil
-        }
+        hydrateFromStore(for: selectedJobId)
         isDirty = false
     }
 
@@ -113,16 +104,7 @@ final class BurnViewModel: ObservableObject {
         // If we're on manage screen and have unsaved edits, confirm first
         guard route == .manageCeiling, isDirty else {
             selectedJobId = newJobId
-            if let id = newJobId {
-                let rec = try? CeilingStore.loadRecord(jobId: id)
-                self.ceilingReleases = rec?.releases ?? []
-                self.popStartDate = rec?.popStart
-                self.popEndDate = rec?.popEnd
-            } else {
-                self.ceilingReleases = []
-                self.popStartDate = nil
-                self.popEndDate = nil
-            }
+            hydrateFromStore(for: newJobId)
             isDirty = false
             return
         }
@@ -147,16 +129,7 @@ final class BurnViewModel: ObservableObject {
 
     func discardEdits() {
         isDirty = false
-        if let id = selectedJobId {
-            let rec = try? CeilingStore.loadRecord(jobId: id)
-            self.ceilingReleases = rec?.releases ?? []
-            self.popStartDate = rec?.popStart
-            self.popEndDate = rec?.popEnd
-        } else {
-            self.ceilingReleases = []
-            self.popStartDate = nil
-            self.popEndDate = nil
-        }
+        hydrateFromStore(for: selectedJobId)
     }
 
     func confirmSaveThenProceed() { saveCeiling(); proceedAfterDecision() }
@@ -167,10 +140,7 @@ final class BurnViewModel: ObservableObject {
         if let r = pendingRoute { route = r; pendingRoute = nil }
         if let jid = pendingJobIdChange {
             selectedJobId = jid
-            let rec = try? CeilingStore.loadRecord(jobId: jid)
-            self.ceilingReleases = rec?.releases ?? []
-            self.popStartDate = rec?.popStart
-            self.popEndDate = rec?.popEnd
+            hydrateFromStore(for: jid)
             pendingJobIdChange = nil
         }
         showUnsavedConfirm = false
@@ -198,9 +168,9 @@ final class BurnViewModel: ObservableObject {
             alertMessage = "Select a job first"
             return
         }
-        // Ensure we have ceiling releases loaded for this job so thresholds can render
+        // Ensure we have ceiling releases and PoP dates loaded for this job so thresholds can render
         if ceilingReleases.isEmpty {
-            ceilingReleases = CeilingStore.load(jobId: jobId)
+            hydrateFromStore(for: jobId)
         }
 
         // Require PoP dates
