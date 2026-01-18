@@ -1,4 +1,4 @@
-# burn
+# tshgraphs
 
 A macOS SwiftUI app that builds cumulative burn charts for job codes using the
 QuickBooks Time (formerly TSheets) API. It pulls month-by-month timesheets for
