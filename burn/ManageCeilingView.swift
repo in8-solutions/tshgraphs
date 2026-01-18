@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// ManageCeilingView
-/// A simple editor for per‑job Ceiling releases. The job tree remains in the
-/// left pane; this view only manages the detail for the selected job.
+/// Editor for per‑job Ceiling releases. The job tree remains in the left pane;
+/// this view manages the detail for the selected job.
 struct ManageCeilingView: View {
     @ObservedObject var vm: BurnViewModel
 
