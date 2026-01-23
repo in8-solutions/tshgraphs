@@ -16,6 +16,9 @@ struct ChartCard: View {
     let ceilingSeries: [Double]?
     let ceiling75Series: [Double]?
     let projectedStartIndex: Int?
+    // Monthly breakdown data
+    let monthlySeries: [(month: String, value: Double)]?
+    let cumulativeActualSeries: [(month: String, value: Double)]?
     @State private var hoverIndex: Int? = nil
 
     init(title: String,
@@ -25,7 +28,9 @@ struct ChartCard: View {
          end: Date,
          projectedStartIndex: Int?,
          ceilingSeries: [Double]? = nil,
-         ceiling75Series: [Double]? = nil) {
+         ceiling75Series: [Double]? = nil,
+         monthlySeries: [(month: String, value: Double)]? = nil,
+         cumulativeActualSeries: [(month: String, value: Double)]? = nil) {
         self.title = title
         self.employees = employees
         self.series = series
@@ -34,6 +39,8 @@ struct ChartCard: View {
         self.projectedStartIndex = projectedStartIndex
         self.ceilingSeries = ceilingSeries
         self.ceiling75Series = ceiling75Series
+        self.monthlySeries = monthlySeries
+        self.cumulativeActualSeries = cumulativeActualSeries
     }
 
     // Segment for line drawing
@@ -221,6 +228,7 @@ struct ChartCard: View {
                 }
                 .chartXScale(domain: monthLabels)
                 .chartPlotStyle { $0.padding(.trailing, 36) }
+                .padding(.leading, 80)
                 .chartYAxis { AxisMarks(position: .leading) }
                 .chartXAxis {
                     AxisMarks(values: monthLabels) { val in
@@ -236,23 +244,22 @@ struct ChartCard: View {
                         }
                     }
                 }
-                .chartXAxisLabel("Month")
                 .chartYAxisLabel("Cumulative Hours")
                 .frame(maxWidth: .infinity)
                 .chartOverlay { proxy in
                     GeometryReader { geo in
-                        Rectangle().fill(.clear)
+                        Color.clear
                             .onContinuousHover { phase in
                                 switch phase {
                                 case .active(let location):
-                                    let plotFrame: CGRect
+                                    let currentPlotFrame: CGRect
                                     if #available(macOS 14.0, *) {
                                         guard let anchor = proxy.plotFrame else { return hoverIndex = nil }
-                                        plotFrame = geo[anchor]
+                                        currentPlotFrame = geo[anchor]
                                     } else {
-                                        plotFrame = geo[proxy.plotAreaFrame]
+                                        currentPlotFrame = geo[proxy.plotAreaFrame]
                                     }
-                                    let xInPlot = location.x - plotFrame.origin.x
+                                    let xInPlot = location.x - currentPlotFrame.origin.x
                                     var nearest: (idx: Int, dist: CGFloat)? = nil
                                     for (idx, m) in monthLabels.enumerated() {
                                         if let xPos = proxy.position(forX: m) {
@@ -268,6 +275,12 @@ struct ChartCard: View {
                     }
                 }
                 .chartLegend(.hidden)
+
+                // Monthly data table
+                if let monthly = monthlySeries, !monthly.isEmpty {
+                    monthlyDataTable
+                        .padding(.top, 8)
+                }
 
                 Text(footerText)
                     .font(.footnote)
@@ -299,6 +312,57 @@ struct ChartCard: View {
             }
             .padding()
         }
+    }
+
+    // MARK: - Monthly Data Table
+    // Chart has 80px leading padding + ~45px for Y-axis labels = ~125px before plot area
+    private let labelColumnWidth: CGFloat = 125
+
+    @ViewBuilder
+    private var monthlyDataTable: some View {
+        let columnCount = monthLabels.count
+
+        VStack(alignment: .leading, spacing: 2) {
+            // Actual Hours row
+            if let monthly = monthlySeries, monthly.count == columnCount {
+                dataRow(label: "Actual", values: monthly.map { $0.value }, color: .blue)
+            }
+
+            // Cumulative Actual row
+            if let cumActual = cumulativeActualSeries, cumActual.count == columnCount {
+                dataRow(label: "Cumulative", values: cumActual.map { $0.value }, color: .blue.opacity(0.7))
+            }
+
+            // Ceiling row
+            if let caps = ceilingSeries, caps.count == columnCount, caps.contains(where: { $0 > 0 }) {
+                dataRow(label: "Ceiling", values: caps, color: .red)
+            }
+
+            // 75% row
+            if let caps75 = ceiling75Series, caps75.count == columnCount, caps75.contains(where: { $0 > 0 }) {
+                dataRow(label: "75%", values: caps75, color: Color(hue: 0.14, saturation: 0.95, brightness: 0.95))
+            }
+        }
+    }
+
+    private func dataRow(label: String, values: [Double], color: Color) -> some View {
+        HStack(spacing: 0) {
+            // Row label - fits in the space before the chart's plot area
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(color)
+                .frame(width: labelColumnWidth, alignment: .trailing)
+                .padding(.trailing, 8)
+
+            // Data values in equal columns, centered
+            ForEach(Array(values.enumerated()), id: \.offset) { _, value in
+                Text(String(format: "%.2f", value))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(color)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.trailing, 36)
     }
 
     // MARK: - Totals & Formatting

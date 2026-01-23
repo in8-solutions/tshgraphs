@@ -59,7 +59,9 @@ struct ContentView: View {
                                     end: vm.popEndDate ?? vm.endDate,
                                     projectedStartIndex: vm.projectedStartIndex,
                                     ceilingSeries: vm.ceilingSeries,
-                                    ceiling75Series: vm.ceiling75Series
+                                    ceiling75Series: vm.ceiling75Series,
+                                    monthlySeries: vm.monthlySeries,
+                                    cumulativeActualSeries: vm.cumulativeActualSeries
                                 )
                                 vm.alertTitle = ok ? "Success" : "Error"
                                 vm.alertMessage = message
@@ -79,9 +81,11 @@ struct ContentView: View {
                             end: vm.popEndDate ?? vm.endDate,
                             projectedStartIndex: vm.projectedStartIndex,
                             ceilingSeries: vm.ceilingSeries,
-                            ceiling75Series: vm.ceiling75Series
+                            ceiling75Series: vm.ceiling75Series,
+                            monthlySeries: vm.monthlySeries,
+                            cumulativeActualSeries: vm.cumulativeActualSeries
                         )
-                        .frame(height: 360)
+                        .frame(minHeight: 420)
                     } else {
                         GroupBox {
                             VStack(alignment: .leading, spacing: 8) {

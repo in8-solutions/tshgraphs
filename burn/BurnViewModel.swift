@@ -55,6 +55,8 @@ final class BurnViewModel: ObservableObject {
 
     // Outputs
     @Published var cumulativeSeries: [(month: String, value: Double)] = []
+    @Published var monthlySeries: [(month: String, value: Double)] = []  // Actual hours per month (0 for projected)
+    @Published var cumulativeActualSeries: [(month: String, value: Double)] = []  // Cumulative actual hours only
     @Published var alertTitle: String?
     @Published var alertMessage: String?
     @Published var isLoading: Bool = false
@@ -194,10 +196,11 @@ final class BurnViewModel: ObservableObject {
 
         // Query month-by-month
         var cur = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: popStart))!
-        let endAnchor = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: endDate))!
+        // Use month key comparison to avoid timezone issues with date comparison
+        let endMonthKey = Self.keyFor(date: endDate)
 
         do {
-            while cur <= endAnchor {
+            while Self.keyFor(date: cur) <= endMonthKey {
                 let monthStart = Self.monthStart(cur)
                 let monthEnd = Self.monthEnd(cur)
                 let rangeStart = max(monthStart, popStart)
@@ -214,6 +217,9 @@ final class BurnViewModel: ObservableObject {
 
                 cur = Calendar.current.date(byAdding: .month, value: 1, to: cur)!
             }
+
+            // Capture actual hours before adding projections
+            let actualHoursDict = hoursDict
 
             // Add projections if popEnd > endDate
             if popEnd > endDate {
@@ -238,16 +244,42 @@ final class BurnViewModel: ObservableObject {
 
             // Build cumulative series using allMonths, and record projectedStartIndex
             var running = 0.0
+            var runningActual = 0.0
             let cal = Calendar.current
             let dayAfterEnd = cal.date(byAdding: .day, value: 1, to: endDate) ?? endDate
             let projStartKey = Self.keyFor(date: cal.date(from: cal.dateComponents([.year, .month], from: dayAfterEnd))!)
             var projIdx: Int? = nil
+            var monthlyData: [(month: String, value: Double)] = []
+            var cumulativeActualData: [(month: String, value: Double)] = []
+
+            // If endDate is today or in the past, projections start from the month AFTER endDate's month
+            // If endDate is in the future, projections start from endDate's month
+            let today = cal.startOfDay(for: Date())
+            let endDateDay = cal.startOfDay(for: endDate)
+            let endDateInFuture = endDateDay > today
+
             cumulativeSeries = allMonths.enumerated().map { (idx, m) in
-                if projIdx == nil && m >= projStartKey && popEnd > endDate { projIdx = idx }
+                // Mark projection start index for chart styling
+                // If endDate is in the past/today, only mark months AFTER the endDate month as projected
+                // If endDate is in the future, mark from the endDate month onwards
+                let isProjectionStart = endDateInFuture ? (m >= projStartKey) : (m > projStartKey)
+                if projIdx == nil && isProjectionStart && popEnd > endDate { projIdx = idx }
                 running += hoursDict[m, default: 0]
+
+                // For monthly series: actual hours from actualHoursDict
+                // (actualHoursDict has 0 for months with no actual data, so no need to check isProjected)
+                let actualHours = actualHoursDict[m, default: 0]
+                monthlyData.append((m, actualHours))
+
+                // For cumulative actual: always add actual hours
+                runningActual += actualHours
+                cumulativeActualData.append((m, runningActual))
+
                 return (m, running)
             }
             self.projectedStartIndex = projIdx
+            self.monthlySeries = monthlyData
+            self.cumulativeActualSeries = cumulativeActualData
             let names: [String] = usedUserIds.compactMap { uid in
                 if let u = usersById[uid] {
                     if let n = u.name, !n.isEmpty { return n }
