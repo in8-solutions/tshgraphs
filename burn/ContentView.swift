@@ -36,9 +36,16 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         VStack(alignment: .leading) {
-                            Text("Query Stop")
-                            DatePicker("", selection: $vm.endDate, displayedComponents: .date)
-                                .labelsHidden()
+                            HStack(spacing: 10) {
+                                Text("Query Stop")
+                            }
+                            HStack(spacing: 10) {
+                                DatePicker("", selection: $vm.endDate, in: ...Date(), displayedComponents: .date)
+                                    .labelsHidden()
+                                    .disabled(vm.queryToEndOfPoP)
+                                Toggle("Query to End of PoP", isOn: $vm.queryToEndOfPoP)
+                                    .toggleStyle(.checkbox)
+                            }
                         }
                         Spacer()
                         Button(action: { Task { await vm.generateChart() } }) {

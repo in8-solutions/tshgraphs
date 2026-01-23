@@ -35,7 +35,8 @@ struct ChartSaver {
             ceilingSeries: ceilingSeries,
             ceiling75Series: ceiling75Series,
             monthlySeries: monthlySeries,
-            cumulativeActualSeries: cumulativeActualSeries
+            cumulativeActualSeries: cumulativeActualSeries,
+            renderChartWidth: 1200
         )
         .frame(width: 1200, height: 800)
         .padding()

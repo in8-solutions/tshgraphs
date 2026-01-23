@@ -28,6 +28,10 @@ final class BurnViewModel: ObservableObject {
             if let oldId = oldValue, !cumulativeSeries.isEmpty {
                 saveChartToCache(for: oldId)
             }
+            // Reset query-to-end toggle only when switching between jobs
+            if let oldId = oldValue, let newId = selectedJobId, oldId != newId {
+                queryToEndOfPoP = false
+            }
 
             // If we are not on Manage Ceiling or we don't have unsaved edits,
             // hydrate from store automatically so the chart screen enables Generate.
@@ -67,7 +71,16 @@ final class BurnViewModel: ObservableObject {
     }()
 
     @Published var popStartDate: Date? = nil
-    @Published var popEndDate: Date? = nil
+    @Published var popEndDate: Date? = nil {
+        didSet {
+            if queryToEndOfPoP { syncQueryStopToPoP() }
+        }
+    }
+    @Published var queryToEndOfPoP: Bool = false {
+        didSet {
+            if queryToEndOfPoP { syncQueryStopToPoP() }
+        }
+    }
 
     // Routing & ceiling management state
     @Published var route: Route = .chart
@@ -177,6 +190,14 @@ final class BurnViewModel: ObservableObject {
         showUnsavedConfirm = false
     }
 
+    private func syncQueryStopToPoP() {
+        guard let popEnd = popEndDate else { return }
+        let cal = Calendar.current
+        let popEndDay = cal.startOfDay(for: popEnd)
+        let today = cal.startOfDay(for: Date())
+        endDate = min(popEndDay, today)
+    }
+
     func generateChart() async {
         // Always show progress while we prep
         isLoading = true
@@ -212,12 +233,24 @@ final class BurnViewModel: ObservableObject {
         guard endDate >= popStart else {
             alertTitle = "Invalid Range"; alertMessage = "Query Stop occurs before PoP Start. Adjust Query Stop or PoP dates."; return
         }
+        // Query Stop must not be in the future
+        let today = Calendar.current.startOfDay(for: Date())
+        guard Calendar.current.startOfDay(for: endDate) <= today else {
+            alertTitle = "Invalid Range"; alertMessage = "Query Stop cannot be in the future. Select today or an earlier date."; return
+        }
 
         // Normalize dates to start of day for consistent comparisons
         let cal = Calendar.current
         let popEndDay = cal.startOfDay(for: popEnd)
         let endDateDay = cal.startOfDay(for: endDate)
         let hasProjection = popEndDay > endDateDay
+
+        if endDateDay > popEndDay {
+            let popEndStr = DateFormatters.shortDate.string(from: popEndDay)
+            let endStr = DateFormatters.shortDate.string(from: endDateDay)
+            alertTitle = "Warning"
+            alertMessage = "Query Stop (\(endStr)) is after PoP End (\(popEndStr)). Chart will include time beyond PoP."
+        }
 
         // Build month buckets
         let months = Self.monthKeys(from: popStart, to: endDate)
