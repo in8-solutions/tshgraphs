@@ -6,8 +6,6 @@
 import SwiftUI
 import Charts
 
-// MARK: - Views
-
 struct ContentView: View {
     @StateObject private var vm = BurnViewModel()
 
@@ -19,7 +17,7 @@ struct ContentView: View {
                 } label: {
                     Label("Manage Ceiling", systemImage: "wrench.and.screwdriver")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .padding(.bottom, 6)
 
                 Text("Select Job").font(.headline)
@@ -27,7 +25,7 @@ struct ContentView: View {
                     vm.requestJobChange(to: sel.first)
                 })) {
                     ForEach(vm.jobTree, id: \.self) { node in
-                        NodeRow(node: node, selection: $vm.selectedJobId)
+                        NodeRow(node: node, selection: $vm.selectedJobId, jobsWithCharts: vm.jobsWithCharts)
                     }
                 }
             }
@@ -46,6 +44,7 @@ struct ContentView: View {
                         Button(action: { Task { await vm.generateChart() } }) {
                             if vm.isLoading { ProgressView() } else { Text("Generate Burn Chart") }
                         }
+                        .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.return, modifiers: [.command])
                         .disabled(vm.selectedJobId == nil || !(vm.popStartDate != nil && vm.popEndDate != nil && vm.popStartDate! <= vm.popEndDate!))
                         Button(action: {
@@ -69,6 +68,7 @@ struct ContentView: View {
                         }) {
                             Text("Save Chart to Photos")
                         }
+                        .buttonStyle(.borderedProminent)
                         .disabled(vm.cumulativeSeries.isEmpty)
                     }
 

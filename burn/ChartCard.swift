@@ -6,6 +6,13 @@ struct ChartCard: View {
     private static let solidLine = StrokeStyle(lineWidth: 2)
     private static let dashedLine = StrokeStyle(lineWidth: 2, dash: [6, 4])
 
+    // Theme colors
+    static let hoursWorkedColor = Color(red: 0.306, green: 0.631, blue: 1.0)       // #4EA1FF
+    static let ceilingColor = Color(red: 0.725, green: 0.110, blue: 0.110)         // #B91C1C
+    static let threshold75Color = Color(red: 0.961, green: 0.620, blue: 0.043)     // #F59E0B
+    static let underBudgetColor = Color.green
+    static let overBudgetColor = Color.red
+
     // Inputs
     let title: String
     let employees: [String]
@@ -95,14 +102,14 @@ struct ChartCard: View {
                     y: .value("Hours", seg.y1),
                     series: .value("seg", seg.id)
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(ChartCard.hoursWorkedColor)
                 .lineStyle(isProjected ? ChartCard.dashedLine : ChartCard.solidLine)
                 LineMark(
                     x: .value("Month", seg.x2),
                     y: .value("Hours", seg.y2),
                     series: .value("seg", seg.id)
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(ChartCard.hoursWorkedColor)
                 .lineStyle(isProjected ? ChartCard.dashedLine : ChartCard.solidLine)
             }
 
@@ -112,10 +119,10 @@ struct ChartCard: View {
                     x: .value("Month", monthLabels[idx]),
                     y: .value("Hours", p.value)
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(ChartCard.hoursWorkedColor)
             }
 
-            // Threshold lines on top: 75% (amber) and Ceiling (red)
+            // Threshold lines
             if let caps75 = ceiling75Series, caps75.count == monthLabels.count {
                 let pts75 = Array(zip(monthLabels, caps75))
                 ForEach(Array(pts75.enumerated()), id: \.0) { _, p in
@@ -126,7 +133,7 @@ struct ChartCard: View {
                     )
                 }
                 .interpolationMethod(.linear)
-                .foregroundStyle(AnyShapeStyle(Color(hue: 0.14, saturation: 0.95, brightness: 0.95)))
+                .foregroundStyle(AnyShapeStyle(ChartCard.threshold75Color))
                 .lineStyle(StrokeStyle(lineWidth: 2.5))
                 .zIndex(5)
             }
@@ -140,7 +147,7 @@ struct ChartCard: View {
                     )
                 }
                 .interpolationMethod(.linear)
-                .foregroundStyle(AnyShapeStyle(Color(red: 1.0, green: 0.22, blue: 0.22)))
+                .foregroundStyle(AnyShapeStyle(ChartCard.ceilingColor))
                 .lineStyle(StrokeStyle(lineWidth: 2.5))
                 .zIndex(6)
             }
@@ -173,45 +180,85 @@ struct ChartCard: View {
 
             VStack(alignment: .leading) {
                 Text(title).font(.headline)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("PoP:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Text(shortDate(start)).font(.subheadline)
+                    Text("→").font(.subheadline).foregroundStyle(.tertiary)
+                    Text(shortDate(end)).font(.subheadline)
+                    Text("•").foregroundStyle(.tertiary)
+                    Text("Projected:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    if let p = projectedTotal {
+                        Text(p.hoursFormatted)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(projectionColor)
+                    } else {
+                        Text("—").font(.subheadline)
+                    }
+                    Text("•").foregroundStyle(.tertiary)
+                    Text("Ceiling:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    if let c = ceilingTotal {
+                        Text(c.hoursFormatted)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Self.ceilingColor)
+                    } else {
+                        Text("—").font(.subheadline)
+                    }
+                    Text("•").foregroundStyle(.tertiary)
+                    Text("Remaining:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    if let remaining = remainingHours {
+                        Text(remaining.hoursFormatted)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(remaining >= 0 ? Self.underBudgetColor : Self.overBudgetColor)
+                    } else {
+                        Text("—").font(.subheadline)
+                    }
+                }
                 if !employees.isEmpty {
                     Text("Employees: " + employees.joined(separator: ", "))
-                        .font(.caption)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
 
-                // Mini legend
-
+                // Legend
                 HStack(spacing: 20) {
                     Spacer()
                     HStack(spacing: 6) {
-                        Capsule().stroke(Color.blue, lineWidth: 3).frame(width: 36, height: 8)
-                        Text("Hours Worked").font(.caption).foregroundStyle(Color.blue)
+                        Capsule().stroke(Self.hoursWorkedColor, lineWidth: 3).frame(width: 36, height: 8)
+                        Text("Hours Worked").font(.caption).foregroundStyle(ChartCard.hoursWorkedColor)
                     }
                     if let p = projectedStartIndex, p < series.count {
                         HStack(spacing: 6) {
-                            Capsule().stroke(Color.blue, style: StrokeStyle(lineWidth: 3, dash: [6,4])).frame(width: 36, height: 8)
+                            Capsule().stroke(Self.hoursWorkedColor, style: StrokeStyle(lineWidth: 3, dash: [6,4])).frame(width: 36, height: 8)
                             Text("Projected").font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     if let caps = ceiling75Series, caps.contains(where: { $0 > 0 }) {
                         HStack(spacing: 6) {
                             Capsule()
-                                .stroke(Color.yellow, lineWidth: 3)
+                                .stroke(Self.threshold75Color, lineWidth: 3)
                                 .frame(width: 36, height: 8)
                             Text("75%")
                                 .font(.caption)
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(Self.threshold75Color)
                         }
                     }
                     if let caps = ceilingSeries, caps.contains(where: { $0 > 0 }) {
                         HStack(spacing: 6) {
                             Capsule()
-                                .stroke(Color.red, lineWidth: 3)
+                                .stroke(Self.ceilingColor, lineWidth: 3)
                                 .frame(width: 36, height: 8)
                             Text("Ceiling")
                                 .font(.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(Self.ceilingColor)
                         }
                     }
                 }
@@ -239,7 +286,7 @@ struct ChartCard: View {
                             AxisGridLine()
                             AxisTick()
                             AxisValueLabel {
-                                Text(s).foregroundStyle(isProjected ? Color.secondary : Color.blue)
+                                Text(s).foregroundStyle(isProjected ? Color.secondary : ChartCard.hoursWorkedColor)
                             }
                         }
                     }
@@ -280,42 +327,15 @@ struct ChartCard: View {
                 if let monthly = monthlySeries, !monthly.isEmpty {
                     monthlyDataTable
                         .padding(.top, 8)
+                        .padding(.bottom, 12)
                 }
 
-                Text(footerText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("Projected Total:")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    if let p = projectedTotal {
-                        Text(p.hoursFormatted)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(projectionColor)
-                    } else {
-                        Text("—").font(.footnote)
-                    }
-                    Divider().frame(height: 12)
-                    Text("Ceiling:")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    if let c = ceilingTotal {
-                        Text(c.hoursFormatted)
-                            .font(.footnote.weight(.semibold))
-                    } else {
-                        Text("—").font(.footnote)
-                    }
-                }
-                .padding(.top, 2)
             }
             .padding()
         }
     }
 
     // MARK: - Monthly Data Table
-    // Chart has 80px leading padding + ~45px for Y-axis labels = ~125px before plot area
     private let labelColumnWidth: CGFloat = 125
 
     @ViewBuilder
@@ -323,42 +343,41 @@ struct ChartCard: View {
         let columnCount = monthLabels.count
 
         VStack(alignment: .leading, spacing: 2) {
-            // Actual Hours row
+            // Monthly Hours row (gray for projected months)
             if let monthly = monthlySeries, monthly.count == columnCount {
-                dataRow(label: "Actual", values: monthly.map { $0.value }, color: .blue)
+                dataRow(label: "Monthly", values: monthly.map { $0.value }, color: Self.hoursWorkedColor, projectedStartIndex: projectedStartIndex)
             }
 
-            // Cumulative Actual row
+            // Cumulative row (gray for projected months)
             if let cumActual = cumulativeActualSeries, cumActual.count == columnCount {
-                dataRow(label: "Cumulative", values: cumActual.map { $0.value }, color: .blue.opacity(0.7))
+                dataRow(label: "Cumulative", values: cumActual.map { $0.value }, color: Self.hoursWorkedColor.opacity(0.7), projectedStartIndex: projectedStartIndex)
             }
 
             // Ceiling row
             if let caps = ceilingSeries, caps.count == columnCount, caps.contains(where: { $0 > 0 }) {
-                dataRow(label: "Ceiling", values: caps, color: .red)
+                dataRow(label: "Ceiling", values: caps, color: Self.ceilingColor)
             }
 
             // 75% row
             if let caps75 = ceiling75Series, caps75.count == columnCount, caps75.contains(where: { $0 > 0 }) {
-                dataRow(label: "75%", values: caps75, color: Color(hue: 0.14, saturation: 0.95, brightness: 0.95))
+                dataRow(label: "75%", values: caps75, color: Self.threshold75Color)
             }
         }
     }
 
-    private func dataRow(label: String, values: [Double], color: Color) -> some View {
+    private func dataRow(label: String, values: [Double], color: Color, projectedStartIndex: Int? = nil) -> some View {
         HStack(spacing: 0) {
-            // Row label - fits in the space before the chart's plot area
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(color)
                 .frame(width: labelColumnWidth, alignment: .trailing)
                 .padding(.trailing, 8)
 
-            // Data values in equal columns, centered
-            ForEach(Array(values.enumerated()), id: \.offset) { _, value in
+            ForEach(Array(values.enumerated()), id: \.offset) { idx, value in
+                let isProjected = projectedStartIndex != nil && idx >= projectedStartIndex!
                 Text(String(format: "%.2f", value))
                     .font(.caption2.monospacedDigit())
-                    .foregroundStyle(color)
+                    .foregroundStyle(isProjected ? .secondary : color)
                     .frame(maxWidth: .infinity)
             }
         }
@@ -382,24 +401,9 @@ struct ChartCard: View {
         else if p > c { return .orange }       // 0-10% over
         else { return .green }                 // at or under
     }
-
-    private var footerText: String {
-        let pop = "PoP: \(shortDate(start)) → \(shortDate(end))"
-        guard let p = projectedStartIndex, p > 0, p <= series.count else { return pop }
-        let key = series[p - 1].month
-        if let qs = endOfMonth(forMonthKey: key) {
-            return pop + " • Query Stop: " + shortDate(qs)
-        }
-        return pop
-    }
-
-    private func endOfMonth(forMonthKey key: String) -> Date? {
-        guard let monthDate = DateFormatters.yearMonth.date(from: key) else { return nil }
-        let cal = Calendar.current
-        let comps = cal.dateComponents([.year, .month], from: monthDate)
-        guard let startOfMonth = cal.date(from: comps),
-              let days = cal.range(of: .day, in: .month, for: startOfMonth)?.count else { return nil }
-        return cal.date(byAdding: .day, value: days - 1, to: startOfMonth)
+    private var remainingHours: Double? {
+        guard let c = ceilingTotal, let p = projectedTotal else { return nil }
+        return c - p
     }
 
     private func shortDate(_ d: Date) -> String {

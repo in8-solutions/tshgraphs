@@ -3,16 +3,21 @@ import SwiftUI
 struct NodeRow: View {
     let node: JobNode
     @Binding var selection: Int?
+    let jobsWithCharts: Set<Int>
     @State private var isExpanded: Bool = false
+
+    private var hasChart: Bool {
+        jobsWithCharts.contains(node.id)
+    }
 
     var body: some View {
         if node.children.isEmpty {
-            // Leaf: no disclosure indicator but aligned with a hidden chevron
             HStack {
                 Image(systemName: "chevron.right")
                     .opacity(0)
                 HStack {
                     Text(node.name)
+                        .foregroundStyle(hasChart ? Color.green : Color.primary)
                     Spacer()
                     if selection == node.id {
                         Image(systemName: "checkmark.circle.fill")
@@ -29,10 +34,9 @@ struct NodeRow: View {
                 }
             }
         } else {
-            // Non-leaf: show disclosure with children; allow tapping label to expand/collapse
             DisclosureGroup(isExpanded: $isExpanded) {
                 ForEach(node.children, id: \.self) { child in
-                    NodeRow(node: child, selection: $selection)
+                    NodeRow(node: child, selection: $selection, jobsWithCharts: jobsWithCharts)
                         .padding(.leading, 12)
                 }
             } label: {
