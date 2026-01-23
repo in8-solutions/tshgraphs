@@ -27,6 +27,8 @@ struct ChartCard: View {
     let monthlySeries: [(month: String, value: Double)]?
     let cumulativeActualSeries: [(month: String, value: Double)]?
     @State private var hoverIndex: Int? = nil
+    @State private var plotAreaLeading: CGFloat = 0
+    @State private var plotAreaWidth: CGFloat = 0
 
     init(title: String,
          employees: [String],
@@ -274,8 +276,8 @@ struct ChartCard: View {
                               projectedStartIndex: projectedStartIndex)
                 }
                 .chartXScale(domain: monthLabels)
-                .chartPlotStyle { $0.padding(.trailing, 36) }
-                .padding(.leading, 80)
+                .chartPlotStyle { $0.padding(.trailing, chartPlotTrailingPadding) }
+                .padding(.leading, chartLeadingPadding)
                 .chartYAxis { AxisMarks(position: .leading) }
                 .chartXAxis {
                     AxisMarks(values: monthLabels) { val in
@@ -296,16 +298,47 @@ struct ChartCard: View {
                 .chartOverlay { proxy in
                     GeometryReader { geo in
                         Color.clear
+                            .onAppear {
+                                let currentPlotFrame: CGRect
+                                if #available(macOS 14.0, *) {
+                                    guard let anchor = proxy.plotFrame else { return }
+                                    currentPlotFrame = geo[anchor]
+                                } else {
+                                    currentPlotFrame = geo[proxy.plotAreaFrame]
+                                }
+                                if currentPlotFrame.width > 0 {
+                                    plotAreaLeading = currentPlotFrame.minX
+                                    plotAreaWidth = currentPlotFrame.width
+                                }
+                            }
+                            .onChange(of: geo.size) { _, _ in
+                                let currentPlotFrame: CGRect
+                                if #available(macOS 14.0, *) {
+                                    guard let anchor = proxy.plotFrame else { return }
+                                    currentPlotFrame = geo[anchor]
+                                } else {
+                                    currentPlotFrame = geo[proxy.plotAreaFrame]
+                                }
+                                if currentPlotFrame.width > 0 {
+                                    plotAreaLeading = currentPlotFrame.minX
+                                    plotAreaWidth = currentPlotFrame.width
+                                }
+                            }
                             .onContinuousHover { phase in
+                                let currentPlotFrame: CGRect
+                                if #available(macOS 14.0, *) {
+                                    guard let anchor = proxy.plotFrame else { return }
+                                    currentPlotFrame = geo[anchor]
+                                } else {
+                                    currentPlotFrame = geo[proxy.plotAreaFrame]
+                                }
+                                if currentPlotFrame.width > 0,
+                                   (plotAreaLeading != currentPlotFrame.minX || plotAreaWidth != currentPlotFrame.width) {
+                                    plotAreaLeading = currentPlotFrame.minX
+                                    plotAreaWidth = currentPlotFrame.width
+                                }
                                 switch phase {
                                 case .active(let location):
-                                    let currentPlotFrame: CGRect
-                                    if #available(macOS 14.0, *) {
-                                        guard let anchor = proxy.plotFrame else { return hoverIndex = nil }
-                                        currentPlotFrame = geo[anchor]
-                                    } else {
-                                        currentPlotFrame = geo[proxy.plotAreaFrame]
-                                    }
                                     let xInPlot = location.x - currentPlotFrame.origin.x
                                     var nearest: (idx: Int, dist: CGFloat)? = nil
                                     for (idx, m) in monthLabels.enumerated() {
@@ -326,7 +359,7 @@ struct ChartCard: View {
                 // Monthly data table
                 if let monthly = monthlySeries, !monthly.isEmpty {
                     monthlyDataTable
-                        .padding(.top, 8)
+                        .padding(.top, 0)
                         .padding(.bottom, 12)
                 }
 
@@ -337,6 +370,10 @@ struct ChartCard: View {
 
     // MARK: - Monthly Data Table
     private let labelColumnWidth: CGFloat = 125
+    private let labelColumnSpacing: CGFloat = 8
+    private let chartPlotTrailingPadding: CGFloat = 36
+    private var chartLeadingPadding: CGFloat { labelColumnWidth + labelColumnSpacing }
+    private let dataRowHeight: CGFloat = 18
 
     @ViewBuilder
     private var monthlyDataTable: some View {
@@ -366,22 +403,41 @@ struct ChartCard: View {
     }
 
     private func dataRow(label: String, values: [Double], color: Color, projectedStartIndex: Int? = nil) -> some View {
-        HStack(spacing: 0) {
+        ZStack(alignment: .leading) {
             Text(label)
                 .font(.caption2)
                 .foregroundStyle(color)
                 .frame(width: labelColumnWidth, alignment: .trailing)
-                .padding(.trailing, 8)
+                .padding(.trailing, labelColumnSpacing)
+                .frame(height: dataRowHeight, alignment: .center)
 
-            ForEach(Array(values.enumerated()), id: \.offset) { idx, value in
-                let isProjected = projectedStartIndex != nil && idx >= projectedStartIndex!
-                Text(String(format: "%.2f", value))
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(isProjected ? .secondary : color)
-                    .frame(maxWidth: .infinity)
+            let columnWidth = plotAreaWidth > 0 ? plotAreaWidth / CGFloat(values.count) : nil
+            if let columnWidth, plotAreaWidth > 0 {
+                HStack(spacing: 0) {
+                    ForEach(0..<values.count, id: \.self) { idx in
+                        Rectangle()
+                            .fill(Color.white.opacity(idx.isMultiple(of: 2) ? 0.035 : 0.02))
+                            .frame(width: columnWidth, height: dataRowHeight)
+                    }
+                }
+                .frame(width: plotAreaWidth, alignment: .leading)
+                .offset(x: plotAreaLeading)
             }
+            HStack(spacing: 0) {
+                ForEach(Array(values.enumerated()), id: \.offset) { idx, value in
+                    let isProjected = projectedStartIndex != nil && idx >= projectedStartIndex!
+                    Text(String(format: "%.2f", value))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(isProjected ? .secondary : color)
+                        .frame(width: columnWidth, alignment: .center)
+                        .frame(height: dataRowHeight, alignment: .center)
+                }
+            }
+            .frame(width: plotAreaWidth, alignment: .leading)
+            .offset(x: plotAreaLeading)
         }
-        .padding(.trailing, 36)
+        .frame(height: dataRowHeight)
+        .padding(.trailing, chartPlotTrailingPadding)
     }
 
     // MARK: - Totals & Formatting
