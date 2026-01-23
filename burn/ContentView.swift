@@ -6,8 +6,6 @@
 import SwiftUI
 import Charts
 
-// MARK: - Views
-
 struct ContentView: View {
     @StateObject private var vm = BurnViewModel()
 
@@ -19,7 +17,7 @@ struct ContentView: View {
                 } label: {
                     Label("Manage Ceiling", systemImage: "wrench.and.screwdriver")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .padding(.bottom, 6)
 
                 Text("Select Job").font(.headline)
@@ -27,7 +25,7 @@ struct ContentView: View {
                     vm.requestJobChange(to: sel.first)
                 })) {
                     ForEach(vm.jobTree, id: \.self) { node in
-                        NodeRow(node: node, selection: $vm.selectedJobId)
+                        NodeRow(node: node, selection: $vm.selectedJobId, jobsWithCharts: vm.jobsWithCharts)
                     }
                 }
             }
@@ -38,14 +36,22 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         VStack(alignment: .leading) {
-                            Text("Query Stop")
-                            DatePicker("", selection: $vm.endDate, displayedComponents: .date)
-                                .labelsHidden()
+                            HStack(spacing: 10) {
+                                Text("Query Stop")
+                            }
+                            HStack(spacing: 10) {
+                                DatePicker("", selection: $vm.endDate, in: ...Date(), displayedComponents: .date)
+                                    .labelsHidden()
+                                    .disabled(vm.queryToEndOfPoP)
+                                Toggle("Query to End of PoP", isOn: $vm.queryToEndOfPoP)
+                                    .toggleStyle(.checkbox)
+                            }
                         }
                         Spacer()
                         Button(action: { Task { await vm.generateChart() } }) {
                             if vm.isLoading { ProgressView() } else { Text("Generate Burn Chart") }
                         }
+                        .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.return, modifiers: [.command])
                         .disabled(vm.selectedJobId == nil || !(vm.popStartDate != nil && vm.popEndDate != nil && vm.popStartDate! <= vm.popEndDate!))
                         Button(action: {
@@ -59,7 +65,9 @@ struct ContentView: View {
                                     end: vm.popEndDate ?? vm.endDate,
                                     projectedStartIndex: vm.projectedStartIndex,
                                     ceilingSeries: vm.ceilingSeries,
-                                    ceiling75Series: vm.ceiling75Series
+                                    ceiling75Series: vm.ceiling75Series,
+                                    monthlySeries: vm.monthlySeries,
+                                    cumulativeActualSeries: vm.cumulativeActualSeries
                                 )
                                 vm.alertTitle = ok ? "Success" : "Error"
                                 vm.alertMessage = message
@@ -67,6 +75,7 @@ struct ContentView: View {
                         }) {
                             Text("Save Chart to Photos")
                         }
+                        .buttonStyle(.borderedProminent)
                         .disabled(vm.cumulativeSeries.isEmpty)
                     }
 
@@ -79,9 +88,11 @@ struct ContentView: View {
                             end: vm.popEndDate ?? vm.endDate,
                             projectedStartIndex: vm.projectedStartIndex,
                             ceilingSeries: vm.ceilingSeries,
-                            ceiling75Series: vm.ceiling75Series
+                            ceiling75Series: vm.ceiling75Series,
+                            monthlySeries: vm.monthlySeries,
+                            cumulativeActualSeries: vm.cumulativeActualSeries
                         )
-                        .frame(height: 360)
+                        .frame(minHeight: 420)
                     } else {
                         GroupBox {
                             VStack(alignment: .leading, spacing: 8) {

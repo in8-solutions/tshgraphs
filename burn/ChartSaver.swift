@@ -20,7 +20,9 @@ struct ChartSaver {
         end: Date,
         projectedStartIndex: Int?,
         ceilingSeries: [Double]? = nil,
-        ceiling75Series: [Double]? = nil
+        ceiling75Series: [Double]? = nil,
+        monthlySeries: [(month: String, value: Double)]? = nil,
+        cumulativeActualSeries: [(month: String, value: Double)]? = nil
     ) async -> (Bool, String) {
         // Build the view we want to render
         let chart = ChartCard(
@@ -31,9 +33,12 @@ struct ChartSaver {
             end: end,
             projectedStartIndex: projectedStartIndex,
             ceilingSeries: ceilingSeries,
-            ceiling75Series: ceiling75Series
+            ceiling75Series: ceiling75Series,
+            monthlySeries: monthlySeries,
+            cumulativeActualSeries: cumulativeActualSeries,
+            renderChartWidth: 1200
         )
-        .frame(width: 1200, height: 700)
+        .frame(width: 1200, height: 800)
         .padding()
         .preferredColorScheme(.dark)
         .background(Color(nsColor: NSColor.windowBackgroundColor))

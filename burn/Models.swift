@@ -70,14 +70,9 @@ struct CeilingRelease: Identifiable, Codable, Hashable {
 // MARK: - Formatting Extensions
 
 extension Double {
-    /// Formats hours with up to 2 decimal places, omitting decimals for whole numbers.
+    /// Formats hours with exactly 2 decimal places.
     var hoursFormatted: String {
-        let rounded = (self * 100).rounded() / 100
-        if rounded == floor(rounded) {
-            return String(Int(rounded))
-        } else {
-            return String(format: "%.2f", rounded)
-        }
+        String(format: "%.2f", self)
     }
 }
 

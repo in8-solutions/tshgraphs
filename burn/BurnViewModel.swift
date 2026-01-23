@@ -6,17 +6,45 @@ enum Route {
     case manageCeiling
 }
 
+// Cached chart data for a job
+private struct ChartCache {
+    let cumulativeSeries: [(month: String, value: Double)]
+    let monthlySeries: [(month: String, value: Double)]
+    let cumulativeActualSeries: [(month: String, value: Double)]
+    let employeeNames: [String]
+    let projectedStartIndex: Int?
+    let ceilingSeries: [Double]?
+    let ceiling75Series: [Double]?
+    let endDate: Date
+}
+
 @MainActor
 final class BurnViewModel: ObservableObject {
     // Inputs
     @Published var jobTree: [JobNode] = []
     @Published var selectedJobId: Int? {
         didSet {
+            // Save current chart to cache before switching
+            if let oldId = oldValue, !cumulativeSeries.isEmpty {
+                saveChartToCache(for: oldId)
+            }
+            // Reset query-to-end toggle only when switching between jobs
+            if let oldId = oldValue, let newId = selectedJobId, oldId != newId {
+                queryToEndOfPoP = false
+            }
+
             // If we are not on Manage Ceiling or we don't have unsaved edits,
             // hydrate from store automatically so the chart screen enables Generate.
             if route != .manageCeiling || !isDirty {
                 hydrateFromStore(for: selectedJobId)
                 isDirty = false
+            }
+
+            // Try to restore chart from cache, otherwise clear it
+            if let newId = selectedJobId, let cached = chartCache[newId] {
+                restoreChartFromCache(cached)
+            } else {
+                clearChart()
             }
         }
     }
@@ -43,7 +71,16 @@ final class BurnViewModel: ObservableObject {
     }()
 
     @Published var popStartDate: Date? = nil
-    @Published var popEndDate: Date? = nil
+    @Published var popEndDate: Date? = nil {
+        didSet {
+            if queryToEndOfPoP { syncQueryStopToPoP() }
+        }
+    }
+    @Published var queryToEndOfPoP: Bool = false {
+        didSet {
+            if queryToEndOfPoP { syncQueryStopToPoP() }
+        }
+    }
 
     // Routing & ceiling management state
     @Published var route: Route = .chart
@@ -55,6 +92,8 @@ final class BurnViewModel: ObservableObject {
 
     // Outputs
     @Published var cumulativeSeries: [(month: String, value: Double)] = []
+    @Published var monthlySeries: [(month: String, value: Double)] = []
+    @Published var cumulativeActualSeries: [(month: String, value: Double)] = []
     @Published var alertTitle: String?
     @Published var alertMessage: String?
     @Published var isLoading: Bool = false
@@ -69,6 +108,12 @@ final class BurnViewModel: ObservableObject {
     private var usersById: [Int: User] = [:]
     @Published var employeeNames: [String] = []
     private var api: APIClient?
+    private var chartCache: [Int: ChartCache] = [:]
+
+    /// Job IDs that have cached/generated charts
+    var jobsWithCharts: Set<Int> {
+        Set(chartCache.keys)
+    }
 
     func loadConfigAndJobs() async {
         do {
@@ -80,7 +125,6 @@ final class BurnViewModel: ObservableObject {
             self.jobcodesById = codes
             self.usersById = users
             self.jobTree = Self.buildTree(from: codes)
-            // No default selection; user must choose a leaf node
         } catch {
             self.alertTitle = "Error"
             self.alertMessage = "Failed to load config or job codes: \(error.localizedDescription)"
@@ -146,6 +190,14 @@ final class BurnViewModel: ObservableObject {
         showUnsavedConfirm = false
     }
 
+    private func syncQueryStopToPoP() {
+        guard let popEnd = popEndDate else { return }
+        let cal = Calendar.current
+        let popEndDay = cal.startOfDay(for: popEnd)
+        let today = cal.startOfDay(for: Date())
+        endDate = min(popEndDay, today)
+    }
+
     func generateChart() async {
         // Always show progress while we prep
         isLoading = true
@@ -181,6 +233,24 @@ final class BurnViewModel: ObservableObject {
         guard endDate >= popStart else {
             alertTitle = "Invalid Range"; alertMessage = "Query Stop occurs before PoP Start. Adjust Query Stop or PoP dates."; return
         }
+        // Query Stop must not be in the future
+        let today = Calendar.current.startOfDay(for: Date())
+        guard Calendar.current.startOfDay(for: endDate) <= today else {
+            alertTitle = "Invalid Range"; alertMessage = "Query Stop cannot be in the future. Select today or an earlier date."; return
+        }
+
+        // Normalize dates to start of day for consistent comparisons
+        let cal = Calendar.current
+        let popEndDay = cal.startOfDay(for: popEnd)
+        let endDateDay = cal.startOfDay(for: endDate)
+        let hasProjection = popEndDay > endDateDay
+
+        if endDateDay > popEndDay {
+            let popEndStr = DateFormatters.shortDate.string(from: popEndDay)
+            let endStr = DateFormatters.shortDate.string(from: endDateDay)
+            alertTitle = "Warning"
+            alertMessage = "Query Stop (\(endStr)) is after PoP End (\(popEndStr)). Chart will include time beyond PoP."
+        }
 
         // Build month buckets
         let months = Self.monthKeys(from: popStart, to: endDate)
@@ -188,25 +258,25 @@ final class BurnViewModel: ObservableObject {
         var usedUserIds = Set<Int>()
 
         // Cover all months up to the later of endDate or popEndDate
-        let overallEnd = max(endDate, popEnd)
+        let overallEnd = max(endDateDay, popEndDay)
         let allMonths = Self.monthKeys(from: popStart, to: overallEnd)
         for m in allMonths where hoursDict[m] == nil { hoursDict[m] = 0 }
 
         // Query month-by-month
         var cur = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: popStart))!
-        let endAnchor = Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: endDate))!
+        // Use month key comparison to avoid timezone issues with date comparison
+        let endMonthKey = Self.keyFor(date: endDate)
 
         do {
-            while cur <= endAnchor {
+            while Self.keyFor(date: cur) <= endMonthKey {
                 let monthStart = Self.monthStart(cur)
                 let monthEnd = Self.monthEnd(cur)
                 let rangeStart = max(monthStart, popStart)
                 let rangeEnd = min(monthEnd, endDate)
 
                 let entries = try await api.fetchTimesheets(start: rangeStart, end: rangeEnd, jobcodeIDs: [jobId])
-                let matching = entries
-                matching.forEach { usedUserIds.insert($0.user_id) }
-                let totalHours = matching
+                entries.forEach { usedUserIds.insert($0.user_id) }
+                let totalHours = entries
                     .map { $0.duration / 3600.0 }
                     .reduce(0, +)
                 let key = Self.keyFor(date: cur)
@@ -215,10 +285,9 @@ final class BurnViewModel: ObservableObject {
                 cur = Calendar.current.date(byAdding: .month, value: 1, to: cur)!
             }
 
-            // Add projections if popEnd > endDate
-            if popEnd > endDate {
-                let cal = Calendar.current
-                let dayAfterEnd = cal.date(byAdding: .day, value: 1, to: endDate) ?? endDate
+            // Add projections if PoP extends beyond query stop
+            if hasProjection {
+                let dayAfterEnd = cal.date(byAdding: .day, value: 1, to: endDateDay) ?? endDateDay
                 var curMonth = cal.date(from: cal.dateComponents([.year, .month], from: dayAfterEnd))!
                 let lastMonth = cal.date(from: cal.dateComponents([.year, .month], from: popEnd))!
                 while curMonth <= lastMonth {
@@ -238,16 +307,31 @@ final class BurnViewModel: ObservableObject {
 
             // Build cumulative series using allMonths, and record projectedStartIndex
             var running = 0.0
-            let cal = Calendar.current
-            let dayAfterEnd = cal.date(byAdding: .day, value: 1, to: endDate) ?? endDate
+            let dayAfterEnd = cal.date(byAdding: .day, value: 1, to: endDateDay) ?? endDateDay
             let projStartKey = Self.keyFor(date: cal.date(from: cal.dateComponents([.year, .month], from: dayAfterEnd))!)
             var projIdx: Int? = nil
+            var monthlyData: [(month: String, value: Double)] = []
+            var cumulativeActualData: [(month: String, value: Double)] = []
+
             cumulativeSeries = allMonths.enumerated().map { (idx, m) in
-                if projIdx == nil && m >= projStartKey && popEnd > endDate { projIdx = idx }
-                running += hoursDict[m, default: 0]
+                // Mark projection start index for chart styling
+                // A month is projected if it's the month containing the first projected day (dayAfterEnd) or later
+                let isProjectionStart = m >= projStartKey
+                if projIdx == nil && isProjectionStart && hasProjection { projIdx = idx }
+                let monthHours = hoursDict[m, default: 0]
+                running += monthHours
+
+                // For monthly series: include both actual and projected hours
+                monthlyData.append((m, monthHours))
+
+                // For cumulative: running total including projected
+                cumulativeActualData.append((m, running))
+
                 return (m, running)
             }
             self.projectedStartIndex = projIdx
+            self.monthlySeries = monthlyData
+            self.cumulativeActualSeries = cumulativeActualData
             let names: [String] = usedUserIds.compactMap { uid in
                 if let u = usersById[uid] {
                     if let n = u.name, !n.isEmpty { return n }
@@ -262,6 +346,9 @@ final class BurnViewModel: ObservableObject {
 
             // Update ceiling series to match the freshly built months
             self.recomputeCeilingSeriesIfPossible()
+
+            // Cache the generated chart
+            saveChartToCache(for: jobId)
         } catch {
             alertTitle = "Error"
             alertMessage = "Failed to generate chart: \(error.localizedDescription)"
@@ -340,7 +427,6 @@ final class BurnViewModel: ObservableObject {
     }
 
     private static func loadConfig() async throws -> Config {
-        // Looks for config.json in the app bundle. Add your config.json to the Xcode project (Copy Bundle Resources).
         guard let url = Bundle.main.url(forResource: "config", withExtension: "json") else {
             throw NSError(domain: "Config", code: 1, userInfo: [NSLocalizedDescriptionKey: "config.json not found in bundle"]) }
         let data = try Data(contentsOf: url)
@@ -397,7 +483,7 @@ final class BurnViewModel: ObservableObject {
     }
 
     func recomputeCeilingSeries(for monthKeys: [String]) {
-        guard let _ = selectedJobId else { ceilingSeries = nil; ceiling75Series = nil; return }
+        guard selectedJobId != nil else { ceilingSeries = nil; ceiling75Series = nil; return }
         let cal = Calendar.current
         // Normalize and sort release dates to local start-of-day to avoid TZ drift and ensure accumulation order
         let releases = ceilingReleases
@@ -441,7 +527,6 @@ final class BurnViewModel: ObservableObject {
         // Start of next month
         return cal.date(byAdding: .month, value: 1, to: first)
     }
-    // DRY helper for hydrating ceilingReleases and PoP dates from store
     private func hydrateFromStore(for id: Int?) {
         if let id = id {
             let rec = try? CeilingStore.loadRecord(jobId: id)
@@ -453,5 +538,40 @@ final class BurnViewModel: ObservableObject {
             self.popStartDate = nil
             self.popEndDate = nil
         }
+    }
+
+    // MARK: - Chart Cache
+    private func saveChartToCache(for jobId: Int) {
+        chartCache[jobId] = ChartCache(
+            cumulativeSeries: cumulativeSeries,
+            monthlySeries: monthlySeries,
+            cumulativeActualSeries: cumulativeActualSeries,
+            employeeNames: employeeNames,
+            projectedStartIndex: projectedStartIndex,
+            ceilingSeries: ceilingSeries,
+            ceiling75Series: ceiling75Series,
+            endDate: endDate
+        )
+    }
+
+    private func restoreChartFromCache(_ cache: ChartCache) {
+        cumulativeSeries = cache.cumulativeSeries
+        monthlySeries = cache.monthlySeries
+        cumulativeActualSeries = cache.cumulativeActualSeries
+        employeeNames = cache.employeeNames
+        projectedStartIndex = cache.projectedStartIndex
+        ceilingSeries = cache.ceilingSeries
+        ceiling75Series = cache.ceiling75Series
+        endDate = cache.endDate
+    }
+
+    private func clearChart() {
+        cumulativeSeries = []
+        monthlySeries = []
+        cumulativeActualSeries = []
+        employeeNames = []
+        projectedStartIndex = nil
+        ceilingSeries = nil
+        ceiling75Series = nil
     }
 }
